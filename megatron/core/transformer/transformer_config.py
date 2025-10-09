@@ -423,6 +423,9 @@ class TransformerConfig(ModelParallelConfig):
     keep_fp8_weight_transpose_cache: bool = False
     """Don't cache the FP8 weight transposes to save memory"""
 
+    use_z_loss: bool = False
+    """Use auxiliary loss following PaLM."""
+
     def __post_init__(self):
         """Python dataclass method that is used to modify attributes after initialization.
         See https://docs.python.org/3/library/dataclasses.html#post-init-processing for more
