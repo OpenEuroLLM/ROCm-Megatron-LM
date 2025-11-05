@@ -843,6 +843,7 @@ def core_transformer_config_from_args(args, config_class=None):
     kw_args['rotary_interleaved'] = args.rotary_interleaved
     kw_args['first_pipeline_num_layers']= args.decoder_first_pipeline_num_layers
     kw_args['last_pipeline_num_layers']= args.decoder_last_pipeline_num_layers
+    kw_args['te_fallback_layernorm_linear'] = True
     if args.swiglu:
         kw_args['activation_func'] = F.silu
         kw_args['gated_linear_unit'] = True
@@ -874,7 +875,6 @@ def core_transformer_config_from_args(args, config_class=None):
 
 def _add_transformer_engine_args(parser):
     group = parser.add_argument_group(title='Transformer-Engine')
-
     group.add_argument('--fp8-format', default=None,
                        choices=['e4m3', 'hybrid'],
                        help='Which fp8 format scheme to use for FP8 tensors in the forward and backward pass',
@@ -904,6 +904,11 @@ def _add_transformer_engine_args(parser):
     group.add_argument('--keep_fp8_weight_transpose_cache', action='store_true', 
                        help='Keep the fp8 weight transpose cache in memory to avoid recomputing it '
                             ' This will use more memory')
+    group.add_argument(
+        '--te-fallback-layernorm-linear',
+        action='store_true',
+        help='Replace TE fused LayerNormLinear with LayerNorm+Linear composition when needed.',
+    )
 
     return parser
 

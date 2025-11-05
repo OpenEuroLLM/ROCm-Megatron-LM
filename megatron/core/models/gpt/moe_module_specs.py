@@ -17,6 +17,8 @@ try:
         TEColumnParallelLinear,
         TERowParallelGroupedLinear,
         TERowParallelLinear,
+        TESelectColumnParallelLinear,
+        TESelectRowParallelLinear,
     )
 
     HAVE_TE = True
@@ -34,8 +36,8 @@ def get_moe_module_spec(
     assert num_experts is not None
 
     mlp = MLPSubmodules(
-        linear_fc1=TEColumnParallelLinear if use_te else ColumnParallelLinear,
-        linear_fc2=TERowParallelLinear if use_te else RowParallelLinear,
+        linear_fc1=TESelectColumnParallelLinear if use_te else ColumnParallelLinear,
+        linear_fc2=TESelectRowParallelLinear if use_te else RowParallelLinear,
     )
 
     # experts spec

@@ -33,6 +33,8 @@ from megatron.core.parallel_state import (
 )
 from megatron.core.tensor_parallel import get_cuda_rng_tracker, get_expert_parallel_rng_tracker_name
 from megatron.core.tensor_parallel.layers import (
+    ColumnParallelLinear,
+    RowParallelLinear,
     _initialize_affine_weight_cpu,
     set_tensor_model_parallel_attributes,
 )
@@ -434,6 +436,103 @@ class TELayerNormColumnParallelLinear(te.pytorch.LayerNormLinear):
             state_dict, prefix, {'weight': 0, 'bias': 0}, sharded_offsets
         )
 
+class TESafeLayerNormColumnParallelLinear(torch.nn.Module):
+    """Fallback that composes TENorm with TEColumnParallelLinear."""
+
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        *,
+        config: TransformerConfig,
+        init_method: Callable,
+        gather_output: bool,
+        bias: bool,
+        skip_bias_add: bool,
+        is_expert: bool,
+        skip_weight_param_allocation: bool = False,
+        tp_comm_buffer_name: Optional[str] = None,
+    ):
+        super().__init__()
+        if gather_output:
+            raise ValueError('Transformer Engine linear layers do not support gather_output = True')
+        if is_expert:
+            raise ValueError('Transformer Engine linear layers do not yet support MoE')
+        if skip_weight_param_allocation:
+            raise ValueError(
+                'Transformer Engine linear layers do not support skip_weight_param_allocation'
+            )
+
+        self.layernorm = TENorm(config, hidden_size=input_size, eps=config.layernorm_epsilon)
+        self.linear = ColumnParallelLinear(
+            input_size=input_size,
+            output_size=output_size,
+            config=config,
+            init_method=condition_init_method(config, init_method),
+            gather_output=False,
+            bias=bias,
+            skip_bias_add=skip_bias_add,
+            is_expert=is_expert,
+            tp_comm_buffer_name=tp_comm_buffer_name,
+        )
+
+    def forward(self, x):
+        normed = self.layernorm(x)
+        return self.linear(normed)
+
+
+class TESelectLayerNormColumnParallelLinear:
+    """Factory that chooses fused or fallback LayerNormLinear based on config."""
+
+    def __new__(cls, *args, **kwargs):
+        config = kwargs.get("config")
+        if config is None:
+            raise ValueError("config must be provided for LayerNormLinear selection")
+        init_method = kwargs.pop("init_method")
+        if getattr(config, "te_fallback_layernorm_linear", False):
+            return TESafeLayerNormColumnParallelLinear(
+                *args,
+                init_method=init_method,
+                **kwargs,
+            )
+        kwargs["init_method"] = init_method
+        return TELayerNormColumnParallelLinear(*args, **kwargs)
+
+
+class TESelectColumnParallelLinear:
+    """Factory selecting TE or Megatron ColumnParallelLinear."""
+
+    def __new__(cls, *args, **kwargs):
+        config = kwargs.get("config")
+        if config is None:
+            raise ValueError("config must be provided for column linear selection")
+        init_method = kwargs.pop("init_method")
+        if getattr(config, "te_fallback_layernorm_linear", False):
+            return ColumnParallelLinear(
+                *args,
+                init_method=condition_init_method(config, init_method),
+                **kwargs,
+            )
+        kwargs["init_method"] = init_method
+        return TEColumnParallelLinear(*args, **kwargs)
+
+
+class TESelectRowParallelLinear:
+    """Factory selecting TE or Megatron RowParallelLinear."""
+
+    def __new__(cls, *args, **kwargs):
+        config = kwargs.get("config")
+        if config is None:
+            raise ValueError("config must be provided for row linear selection")
+        init_method = kwargs.pop("init_method")
+        if getattr(config, "te_fallback_layernorm_linear", False):
+            return RowParallelLinear(
+                *args,
+                init_method=condition_init_method(config, init_method),
+                **kwargs,
+            )
+        kwargs["init_method"] = init_method
+        return TERowParallelLinear(*args, **kwargs)
 
 class TEColumnParallelLinear(TELinear):
     """

@@ -28,10 +28,12 @@ try:
     from megatron.core.extensions.transformer_engine import (
         TEColumnParallelLinear,
         TEDotProductAttention,
-        TELayerNormColumnParallelLinear,
         TELinear,
         TENorm,
         TERowParallelLinear,
+        TESelectColumnParallelLinear,
+        TESelectLayerNormColumnParallelLinear,
+        TESelectRowParallelLinear,
     )
 
     HAVE_TE = True
@@ -86,6 +88,7 @@ def get_gpt_layer_with_transformer_engine_spec(
         moe_grouped_gemm=moe_grouped_gemm,
         moe_use_legacy_grouped_gemm=moe_use_legacy_grouped_gemm,
     )
+    qkv_linear_cls = TESelectLayerNormColumnParallelLinear
 
     if multi_latent_attention:
         return ModuleSpec(
@@ -96,21 +99,21 @@ def get_gpt_layer_with_transformer_engine_spec(
                     module=MLASelfAttention,
                     params={"attn_mask_type": AttnMaskType.causal},
                     submodules=MLASelfAttentionSubmodules(
-                        linear_q_proj=TEColumnParallelLinear,
+                        linear_q_proj=TESelectColumnParallelLinear,
                         linear_q_down_proj=TELinear,
                         linear_q_up_proj=(
-                            TELayerNormColumnParallelLinear
+                            TESelectLayerNormColumnParallelLinear
                             if qk_layernorm
-                            else TEColumnParallelLinear
+                            else TESelectColumnParallelLinear
                         ),
                         linear_kv_down_proj=TELinear,
                         linear_kv_up_proj=(
-                            TELayerNormColumnParallelLinear
+                            TESelectLayerNormColumnParallelLinear
                             if qk_layernorm
-                            else TEColumnParallelLinear
+                            else TESelectColumnParallelLinear
                         ),
                         core_attention=TEDotProductAttention,
-                        linear_proj=TERowParallelLinear,
+                        linear_proj=TESelectRowParallelLinear,
                         q_layernorm=IdentityOp,
                         kv_layernorm=IdentityOp,
                     ),
@@ -135,9 +138,9 @@ def get_gpt_layer_with_transformer_engine_spec(
                     module=SelfAttention,
                     params={"attn_mask_type": AttnMaskType.causal},
                     submodules=SelfAttentionSubmodules(
-                        linear_qkv=TELayerNormColumnParallelLinear,
+                        linear_qkv=qkv_linear_cls,
                         core_attention=TEDotProductAttention,
-                        linear_proj=TERowParallelLinear,
+                        linear_proj=TESelectRowParallelLinear,
                         q_layernorm=qk_norm if qk_layernorm else IdentityOp,
                         k_layernorm=qk_norm if qk_layernorm else IdentityOp,
                     ),
@@ -258,8 +261,8 @@ def _get_mlp_module_spec(
         return ModuleSpec(
             module=MLP,
             submodules=MLPSubmodules(
-                linear_fc1=TELayerNormColumnParallelLinear if use_te else ColumnParallelLinear,
-                linear_fc2=TERowParallelLinear if use_te else RowParallelLinear,
+                linear_fc1=TESelectLayerNormColumnParallelLinear if use_te else ColumnParallelLinear,
+                linear_fc2=TESelectRowParallelLinear if use_te else RowParallelLinear,
             ),
         )
     else:
@@ -280,7 +283,6 @@ def get_gpt_decoder_block_spec(
         layer_norm_impl = TENorm
     else:
         layer_norm_impl = LNImpl
-
     # Layer specs.
     dense_layer_spec = (
         get_gpt_layer_with_transformer_engine_spec(

@@ -177,6 +177,9 @@ class TransformerConfig(ModelParallelConfig):
     apply_rope_fusion: bool = False
     """If True, use fused RoPE kernel."""
 
+    te_fallback_layernorm_linear: bool = False
+    """Use safer LayerNorm+Linear composition when TE fused kernel is unreliable."""
+
     ####################
     # activation recomputation
     ####################
