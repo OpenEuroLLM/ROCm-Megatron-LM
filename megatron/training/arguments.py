@@ -843,7 +843,7 @@ def core_transformer_config_from_args(args, config_class=None):
     kw_args['rotary_interleaved'] = args.rotary_interleaved
     kw_args['first_pipeline_num_layers']= args.decoder_first_pipeline_num_layers
     kw_args['last_pipeline_num_layers']= args.decoder_last_pipeline_num_layers
-    kw_args['te_fallback_layernorm_linear'] = True
+    kw_args['te_fallback_layernorm_linear'] = args.te_fallback_layernorm_linear
     if args.swiglu:
         kw_args['activation_func'] = F.silu
         kw_args['gated_linear_unit'] = True
