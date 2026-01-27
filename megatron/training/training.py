@@ -1359,7 +1359,8 @@ def checkpoint_and_decide_exit(model, optimizer, opt_param_scheduler, iteration,
 
     # Regular save (persistent and non-persistent).
     if args.save and args.save_interval and \
-        iteration % args.save_interval == 0:
+        (iteration % args.save_interval == 0 or \
+        iteration in set(args.save_extra_steps)):
         save_checkpoint_and_time(iteration, model, optimizer,
                                  opt_param_scheduler,
                                  num_floating_point_operations_so_far,
